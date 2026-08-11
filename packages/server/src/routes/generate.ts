@@ -25,6 +25,9 @@ const generateSchema = z.object({
     )
     .min(1)
     .max(20),
+  jiraProjectKeys: z.array(z.string().min(1).max(20).regex(/^[A-Z][A-Z0-9]*$/)).optional(),
+  lookbackDays: z.number().int().min(1).max(365).optional(),
+  pinnedIssueKeys: z.array(z.string().min(1).max(30).regex(/^[A-Z][A-Z0-9]*-\d+$/)).optional(),
   useFake: z.boolean().optional(),
 });
 
@@ -55,7 +58,9 @@ export function generateRouter(audit: AuditPort): Router {
       return;
     }
 
-    const { scopes, useFake } = parse.data;
+    const { scopes, useFake, jiraProjectKeys, lookbackDays, pinnedIssueKeys } = parse.data;
+    // Debug: log what was actually received
+    req.log?.info({ jiraProjectKeys, pinnedIssueKeys, lookbackDays }, "generate request parsed");
     const sessionId = req.sessionId ?? "unknown";
     const creds = req.credStore.get(sessionId);
     if (!creds) {
@@ -74,7 +79,7 @@ export function generateRouter(audit: AuditPort): Router {
     const controller = new AbortController();
     activeGenerations++;
 
-    req.on("close", () => {
+    res.on("close", () => {
       controller.abort();
     });
 
@@ -86,7 +91,11 @@ export function generateRouter(audit: AuditPort): Router {
           ? new FakeSummarizer()
           : new CursorSummarizer(creds.cursorApiToken, creds.cursorModelId);
 
-      await generateReleaseNotes(scopes as RepoScope[], github, jira, summarizer, res, controller.signal);
+      await generateReleaseNotes(scopes as RepoScope[], github, jira, summarizer, res, controller.signal, {
+        ...(jiraProjectKeys ? { jiraProjectKeys } : {}),
+        ...(pinnedIssueKeys ? { pinnedIssueKeys } : {}),
+        lookbackDays: lookbackDays ?? 30,
+      });
 
       await audit.append({
         ts: new Date().toISOString(),
