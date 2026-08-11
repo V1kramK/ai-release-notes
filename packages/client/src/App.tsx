@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { CredentialsPanel } from "./components/CredentialsPanel.js";
 import { ScopeSelector } from "./components/ScopeSelector.js";
+import { JiraProjectSelector } from "./components/JiraProjectSelector.js";
 import { GeneratePanel } from "./components/GeneratePanel.js";
 import { NotesEditor } from "./components/NotesEditor.js";
 import { useCredentials } from "./hooks/useCredentials.js";
@@ -11,12 +12,21 @@ export function App() {
   const credentials = useCredentials();
   const { state, generate, cancel, reset, assembledMarkdown } = useGenerate();
   const [scopes, setScopes] = useState<RepoScope[]>([]);
+  const [jiraProjectKeys, setJiraProjectKeys] = useState<string[]>([]);
+  const [lookbackDays, setLookbackDays] = useState(30);
+  const [pinnedIssues, setPinnedIssues] = useState<string[]>([]);
 
   const handleGenerate = useCallback(
     (useFake = false) => {
-      generate(scopes, useFake);
+      generate(
+        scopes,
+        useFake,
+        jiraProjectKeys.length > 0 ? jiraProjectKeys : undefined,
+        lookbackDays,
+        pinnedIssues.length > 0 ? pinnedIssues : undefined
+      );
     },
-    [scopes, generate]
+    [scopes, generate, jiraProjectKeys, lookbackDays, pinnedIssues]
   );
 
   const credentialsReady = credentials.status?.status === "ok";
@@ -86,6 +96,16 @@ export function App() {
             <ScopeSelector
               credentialsReady={credentialsReady}
               onScopesChange={setScopes}
+            />
+
+            <JiraProjectSelector
+              credentialsReady={credentialsReady}
+              selectedKeys={jiraProjectKeys}
+              onSelectionChange={setJiraProjectKeys}
+              lookbackDays={lookbackDays}
+              onLookbackDaysChange={setLookbackDays}
+              pinnedIssues={pinnedIssues}
+              onPinnedIssuesChange={setPinnedIssues}
             />
 
             <GeneratePanel
