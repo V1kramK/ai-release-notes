@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ErrorCode = void 0;
+exports.ErrorCode = {
+    VALIDATION_FAILED: "VALIDATION_FAILED",
+    SESSION_EXPIRED: "SESSION_EXPIRED",
+    CREDENTIAL_REJECTED: "CREDENTIAL_REJECTED",
+    UPSTREAM_RATE_LIMITED: "UPSTREAM_RATE_LIMITED",
+    UPSTREAM_FAILED: "UPSTREAM_FAILED",
+    AGENT_FAILED: "AGENT_FAILED",
+    AGENT_TIMEOUT: "AGENT_TIMEOUT",
+    CONCURRENCY_LIMIT: "CONCURRENCY_LIMIT",
+};
+//# sourceMappingURL=errors.js.map

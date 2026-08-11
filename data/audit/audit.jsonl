@@ -1,0 +1,6 @@
+{"ts":"2026-08-11T08:59:41.253Z","event":"credential_session_created","sessionRef":"8fac69a6"}
+{"ts":"2026-08-11T08:59:49.032Z","event":"credential_session_created","sessionRef":"26e9b510"}
+{"ts":"2026-08-11T08:59:50.216Z","event":"generation_completed","sessionRef":"26e9b510","repoCount":1,"durationMs":1175,"outcome":"success"}
+{"ts":"2026-08-11T09:01:32.458Z","event":"credential_session_created","sessionRef":"b6c1b632"}
+{"ts":"2026-08-11T09:01:33.874Z","event":"generation_completed","sessionRef":"b6c1b632","repoCount":1,"durationMs":1291,"outcome":"success"}
+{"ts":"2026-08-11T09:01:33.954Z","event":"credential_session_cleared","sessionRef":"b6c1b632"}
