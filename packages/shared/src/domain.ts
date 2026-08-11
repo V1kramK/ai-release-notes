@@ -45,6 +45,10 @@ export interface GeneratedSection {
   category: Category;
   repo: string;
   content: string;
+  /** When grouped by Jira ticket, the issue key (e.g. "OPL-35497"). */
+  jiraKey?: string;
+  /** Human-readable Jira summary for the heading. */
+  jiraSummary?: string;
 }
 
 export interface RepositoryInfo {
