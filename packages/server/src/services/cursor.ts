@@ -1,179 +1,85 @@
-import type { SummarizerPort, SummarizerResult, SummarizerTask } from "../ports/index.js";
-
-const CURSOR_API_BASE = "https://api.cursor.com";
-const POLL_INTERVAL_MS = 1000;
-const MAX_POLL_INTERVAL_MS = 3000;
-const TASK_TIMEOUT_MS = 180_000;
-
-interface AgentCreateResponse {
-  id: string;
-}
-
-interface AgentStatusResponse {
-  id: string;
-  status: "running" | "completed" | "failed" | "cancelled";
-  result?: string;
-  error?: string;
-}
-
-function jitter(base: number): number {
-  return base + Math.floor(Math.random() * 500);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { Agent, Cursor, CursorAgentError } from "@cursor/sdk";
+import type { SummarizerPort, SummarizerResult, SummarizerPingResult, CursorModelInfo } from "../ports/index.js";
 
 export class CursorSummarizer implements SummarizerPort {
-  private readonly apiToken: string;
+  private readonly apiKey: string;
   private readonly modelId: string;
 
-  constructor(apiToken: string, modelId: string) {
-    this.apiToken = apiToken;
+  constructor(apiKey: string, modelId: string) {
+    this.apiKey = apiKey;
     this.modelId = modelId;
   }
 
-  private headers(): Record<string, string> {
-    return {
-      Authorization: `Bearer ${this.apiToken}`,
-      "Content-Type": "application/json",
-      "User-Agent": "release-notes-generator/1.0",
-    };
-  }
+  async summarize(systemPrompt: string, context: string): Promise<SummarizerResult> {
+    const fullPrompt = `${systemPrompt}\n\n---\n\n${context}`;
 
-  async createTask(prompt: string, context: string): Promise<SummarizerTask> {
-    const body = JSON.stringify({
-      model: this.modelId,
-      messages: [
-        {
-          role: "system",
-          content: prompt,
-        },
-        {
-          role: "user",
-          content: context,
-        },
-      ],
-    });
-
-    let lastError: Error | undefined;
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30_000);
-
-        const response = await fetch(`${CURSOR_API_BASE}/v1/agents`, {
-          method: "POST",
-          headers: this.headers(),
-          body,
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-          const text = await response.text().catch(() => "");
-          throw new Error(`Cursor API ${response.status}: ${text.slice(0, 200)}`);
-        }
-
-        const data = (await response.json()) as AgentCreateResponse;
-        return { id: data.id };
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        if (attempt < 1) await sleep(1000);
-      }
-    }
-
-    throw lastError ?? new Error("Failed to create Cursor agent task");
-  }
-
-  async pollTask(taskId: string): Promise<SummarizerResult> {
-    const deadline = Date.now() + TASK_TIMEOUT_MS;
-    let interval = POLL_INTERVAL_MS;
-
-    while (Date.now() < deadline) {
-      await sleep(jitter(interval));
-      interval = Math.min(interval * 1.5, MAX_POLL_INTERVAL_MS);
-
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15_000);
-
-        const response = await fetch(`${CURSOR_API_BASE}/v1/agents/${taskId}`, {
-          headers: this.headers(),
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeout);
-
-        if (response.status === 429) {
-          const retryAfter = response.headers.get("retry-after");
-          const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : 5000;
-          await sleep(waitMs);
-          continue;
-        }
-
-        if (!response.ok) {
-          const text = await response.text().catch(() => "");
-          if (response.status >= 500) {
-            await sleep(jitter(2000));
-            continue;
-          }
-          return { status: "failed", reason: `HTTP ${response.status}: ${text.slice(0, 200)}` };
-        }
-
-        const data = (await response.json()) as AgentStatusResponse;
-
-        if (data.status === "completed" && data.result) {
-          return { status: "succeeded", text: data.result };
-        }
-        if (data.status === "failed") {
-          return { status: "failed", reason: data.error ?? "Agent reported failure" };
-        }
-        if (data.status === "cancelled") {
-          return { status: "failed", reason: "Agent task was cancelled" };
-        }
-      } catch (err) {
-        if (Date.now() >= deadline) break;
-        await sleep(jitter(2000));
-      }
-    }
-
-    return { status: "timed_out" };
-  }
-
-  async cancelTask(taskId: string): Promise<void> {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10_000);
+      console.info(`[cursor-sdk] Agent.prompt starting, model=${this.modelId}`);
 
-      await fetch(`${CURSOR_API_BASE}/v1/agents/${taskId}/cancel`, {
-        method: "POST",
-        headers: this.headers(),
-        signal: controller.signal,
+      const result = await Agent.prompt(fullPrompt, {
+        apiKey: this.apiKey,
+        model: { id: this.modelId },
+        tools: [],
       });
 
-      clearTimeout(timeout);
-    } catch {
-      // best-effort cancel
+      console.info(`[cursor-sdk] Agent.prompt finished, status=${result.status}, durationMs=${result.durationMs}`);
+
+      if (result.status === "finished") {
+        const text = result.result ?? "";
+        if (!text) {
+          return { status: "failed", reason: "Agent finished but returned no text" };
+        }
+        return { status: "succeeded", text };
+      }
+
+      if (result.status === "error") {
+        const reason = result.error?.message ?? "Agent run errored";
+        return { status: "failed", reason };
+      }
+
+      if (result.status === "cancelled") {
+        return { status: "failed", reason: "Agent run was cancelled" };
+      }
+
+      return { status: "failed", reason: `Unexpected status: ${result.status}` };
+    } catch (err) {
+      if (err instanceof CursorAgentError) {
+        const retryNote = err.isRetryable ? " (retryable)" : "";
+        console.error(`[cursor-sdk] CursorAgentError: ${err.message}${retryNote}`);
+        return { status: "failed", reason: `${err.message}${retryNote}` };
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[cursor-sdk] unexpected error:`, msg);
+      return { status: "failed", reason: msg };
     }
   }
 
-  async ping(): Promise<boolean> {
+  async ping(): Promise<SummarizerPingResult> {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const models = await Cursor.models.list({ apiKey: this.apiKey });
+      if (models && models.length > 0) {
+        return { ok: true };
+      }
+      return { ok: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("401") || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("authentication")) {
+        return { ok: false, status: 401, error: msg };
+      }
+      return { ok: false, error: msg };
+    }
+  }
 
-      const response = await fetch(`${CURSOR_API_BASE}/v1/health`, {
-        headers: { "User-Agent": "release-notes-generator/1.0" },
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-      return response.status < 500;
-    } catch {
-      return false;
+  async listModels(): Promise<CursorModelInfo[]> {
+    try {
+      const models = await Cursor.models.list({ apiKey: this.apiKey });
+      return models.map((m) => ({
+        id: m.id,
+        name: m.displayName ?? m.id,
+      }));
+    } catch (err) {
+      console.warn("[cursor-sdk] failed to list models:", err instanceof Error ? err.message : err);
+      return [];
     }
   }
 }
