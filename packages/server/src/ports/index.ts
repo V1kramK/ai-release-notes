@@ -8,11 +8,9 @@ export interface GitHubPort {
 
 export interface JiraPort {
   getIssue(key: string): Promise<JiraIssue | undefined>;
+  /** Batch-fetch multiple issues in a single JQL query. Much faster than N individual getIssue calls. */
+  batchGetIssues(keys: string[]): Promise<Map<string, JiraIssue>>;
   ping(): Promise<boolean>;
-}
-
-export interface SummarizerTask {
-  id: string;
 }
 
 export type SummarizerResult =
@@ -20,11 +18,22 @@ export type SummarizerResult =
   | { status: "failed"; reason: string }
   | { status: "timed_out" };
 
+export interface SummarizerPingResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
+export interface CursorModelInfo {
+  id: string;
+  name?: string;
+}
+
 export interface SummarizerPort {
-  createTask(prompt: string, context: string): Promise<SummarizerTask>;
-  pollTask(taskId: string): Promise<SummarizerResult>;
-  cancelTask(taskId: string): Promise<void>;
-  ping(): Promise<boolean>;
+  /** One-shot: send prompt, wait for result. Handles create+poll internally. */
+  summarize(prompt: string, context: string): Promise<SummarizerResult>;
+  ping(): Promise<SummarizerPingResult>;
+  listModels(): Promise<CursorModelInfo[]>;
 }
 
 export interface SessionCredentials {
