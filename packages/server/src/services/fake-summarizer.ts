@@ -1,34 +1,17 @@
-import { createHash } from "crypto";
-import type { SummarizerPort, SummarizerResult, SummarizerTask } from "../ports/index.js";
+import type { SummarizerPort, SummarizerResult, CursorModelInfo } from "../ports/index.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export class FakeSummarizer implements SummarizerPort {
-  private readonly tasks = new Map<string, { context: string; polls: number }>();
+  async summarize(_prompt: string, context: string): Promise<SummarizerResult> {
+    await sleep(800);
 
-  async createTask(prompt: string, context: string): Promise<SummarizerTask> {
-    const id = createHash("sha256").update(context).digest("hex").slice(0, 12);
-    this.tasks.set(id, { context, polls: 0 });
-    return { id };
-  }
-
-  async pollTask(taskId: string): Promise<SummarizerResult> {
-    await sleep(300);
-    const task = this.tasks.get(taskId);
-    if (!task) return { status: "failed", reason: "Task not found" };
-
-    task.polls++;
-
-    if (task.polls < 2) {
-      return { status: "failed", reason: "still running (fake)" };
-    }
-
-    const lines = task.context
+    const lines = context
       .split("\n")
-      .filter((l) => l.startsWith("- "))
-      .map((l) => `- ${l.slice(2).trim()}`)
+      .filter((l) => l.startsWith("Commit: ") || l.startsWith("Jira Summary: "))
+      .map((l) => `- ${l.replace(/^(Commit|Jira Summary): /, "").trim()}`)
       .join("\n");
 
     return {
@@ -37,11 +20,11 @@ export class FakeSummarizer implements SummarizerPort {
     };
   }
 
-  async cancelTask(taskId: string): Promise<void> {
-    this.tasks.delete(taskId);
+  async ping(): Promise<{ ok: boolean }> {
+    return { ok: true };
   }
 
-  async ping(): Promise<boolean> {
-    return true;
+  async listModels(): Promise<CursorModelInfo[]> {
+    return [{ id: "fake-model", name: "Fake (Demo)" }];
   }
 }
