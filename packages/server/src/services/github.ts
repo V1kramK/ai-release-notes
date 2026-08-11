@@ -44,22 +44,35 @@ export class OctokitGitHubAdapter implements GitHubPort {
     let page = 1;
 
     while (true) {
-      const response = await this.octokit.repos.compareCommitsWithBasehead({
-        owner,
-        repo,
-        basehead: `${base}...${head}`,
-        per_page: 100,
-        page,
-      });
+      let response;
+      try {
+        response = await this.octokit.repos.compareCommitsWithBasehead({
+          owner,
+          repo,
+          basehead: `${base}...${head}`,
+          per_page: 100,
+          page,
+        });
+      } catch (err: unknown) {
+        const status = (err as { status?: number }).status;
+        if (status === 404) {
+          throw new Error(
+            `Ref not found: "${base}" or "${head}" does not exist in ${owner}/${repo}. ` +
+            `Please pick valid branches/tags from the dropdown.`
+          );
+        }
+        throw err;
+      }
 
       for (const c of response.data.commits) {
-        const message = c.commit.message.split("\n")[0] ?? "";
-        const match = JIRA_KEY_REGEX.exec(message);
+        const fullMessage = c.commit.message ?? "";
+        const subject = fullMessage.split("\n")[0] ?? "";
+        const match = JIRA_KEY_REGEX.exec(subject);
         if (!match?.[1]) continue;
 
         commits.push({
           sha: c.sha,
-          message,
+          message: fullMessage,
           jiraKey: match[1],
           author: c.commit.author?.name ?? c.commit.author?.email ?? "unknown",
           date: c.commit.author?.date ?? new Date().toISOString(),
