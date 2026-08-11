@@ -17,6 +17,9 @@ import { credentialsRouter } from "./routes/credentials.js";
 import { repositoriesRouter } from "./routes/repositories.js";
 import { generateRouter } from "./routes/generate.js";
 import { healthRouter } from "./routes/health.js";
+import { jiraProjectsRouter } from "./routes/jira-projects.js";
+import { branchesRouter } from "./routes/branches.js";
+import { jiraIssuesRouter } from "./routes/jira-issues.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "3001", 10);
 const LOG_LEVEL = process.env["LOG_LEVEL"] ?? "info";
@@ -91,6 +94,9 @@ app.use(sessionMiddleware(sessionStore));
 app.use("/api/health", healthRouter(fakeSummarizer));
 app.use("/api/credentials", credentialsRouter(audit));
 app.use("/api/repositories", repositoriesRouter());
+app.use("/api/jira-projects", jiraProjectsRouter());
+app.use("/api/branches", branchesRouter());
+app.use("/api/jira-issues", jiraIssuesRouter());
 app.use("/api/generate", generateRouter(audit));
 
 // Serve React SPA in production
