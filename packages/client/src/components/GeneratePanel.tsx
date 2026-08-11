@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { GenerationState, GenerationWarning } from "../hooks/useGenerate.js";
 import type { RepoScope } from "../lib/api.js";
 
@@ -19,7 +20,12 @@ const PHASE_LABELS: Record<string, string> = {
 
 export function GeneratePanel({ scopes, state, onGenerate, onCancel, onReset }: Props) {
   const canGenerate = scopes.length > 0 && !state.running;
-  const { running, phase, warnings, done, error, durationMs, sections } = state;
+  const { running, phase, warnings, checkpoints, done, error, durationMs, sections } = state;
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [checkpoints.length]);
 
   return (
     <div className="card" style={{ marginBottom: 20 }}>
@@ -93,6 +99,30 @@ export function GeneratePanel({ scopes, state, onGenerate, onCancel, onReset }: 
               style={{ width: phase?.pct != null ? `${phase.pct}%` : "40%" }}
             />
           </div>
+        </div>
+      )}
+
+      {/* Live checkpoint log */}
+      {checkpoints.length > 0 && (
+        <div style={{
+          marginTop: 12, maxHeight: 160, overflowY: "auto",
+          background: "var(--bg)", border: "1px solid var(--border)",
+          borderRadius: 6, padding: "8px 10px",
+          display: "flex", flexDirection: "column", gap: 4,
+        }}>
+          {checkpoints.map((cp, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12 }}>
+              <span style={{ color: "var(--success)", flexShrink: 0, marginTop: 1 }}>✓</span>
+              <span style={{ color: "var(--text)" }}>{cp.message}</span>
+            </div>
+          ))}
+          {running && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
+              <span className="spinner" style={{ width: 10, height: 10 }} />
+              <span>Working…</span>
+            </div>
+          )}
+          <div ref={logEndRef} />
         </div>
       )}
 
