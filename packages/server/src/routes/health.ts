@@ -9,7 +9,7 @@ export function healthRouter(summarizer: SummarizerPort): Router {
     try {
       const cursorReachable = await summarizer.ping();
 
-      if (cursorReachable) {
+      if (cursorReachable.ok) {
         res.status(200).json({
           status: "ok",
           version: "1.0.0",
