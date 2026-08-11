@@ -36,6 +36,8 @@ const SectionSchema = z.object({
   category: z.string() as z.ZodType<Category>,
   repo: z.string(),
   content: z.string(),
+  jiraKey: z.string().optional(),
+  jiraSummary: z.string().optional(),
 });
 
 const DoneSchema = z.object({
@@ -51,6 +53,10 @@ const ErrorSchema = z.object({
   details: z.string().optional(),
 });
 
+const CheckpointSchema = z.object({
+  message: z.string(),
+});
+
 export const SSE_EVENT_SCHEMAS = {
   phase: PhaseSchema,
   counts: CountsSchema,
@@ -59,6 +65,7 @@ export const SSE_EVENT_SCHEMAS = {
   section: SectionSchema,
   done: DoneSchema,
   error: ErrorSchema,
+  checkpoint: CheckpointSchema,
 } as const;
 
 export type SSEEventName = keyof typeof SSE_EVENT_SCHEMAS;
@@ -71,6 +78,8 @@ export type SectionEvent = z.infer<typeof SectionSchema>;
 export type DoneEvent = z.infer<typeof DoneSchema>;
 export type ErrorEvent = z.infer<typeof ErrorSchema>;
 
+export type CheckpointEvent = z.infer<typeof CheckpointSchema>;
+
 export type ReleaseNotesEvent =
   | { name: "phase"; data: PhaseEvent }
   | { name: "counts"; data: CountsEvent }
@@ -78,7 +87,8 @@ export type ReleaseNotesEvent =
   | { name: "heartbeat"; data: HeartbeatEvent }
   | { name: "section"; data: SectionEvent }
   | { name: "done"; data: DoneEvent }
-  | { name: "error"; data: ErrorEvent };
+  | { name: "error"; data: ErrorEvent }
+  | { name: "checkpoint"; data: CheckpointEvent };
 
 export function serializeSSEEvent(event: ReleaseNotesEvent): string {
   return `event: ${event.name}\ndata: ${JSON.stringify(event.data)}\n\n`;
