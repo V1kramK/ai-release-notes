@@ -17,7 +17,7 @@
 | **URL** | https://github.com/V1kramK/ai-release-notes |
 | **README** | https://github.com/V1kramK/ai-release-notes/blob/main/README.md |
 | **Branch** | `main` |
-| **License** | MIT |
+| **License** | Opsera |
 
 ---
 
