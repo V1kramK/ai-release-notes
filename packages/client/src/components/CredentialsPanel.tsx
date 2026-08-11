@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { CredentialPayload, CredentialStatus } from "../lib/api.js";
+import { listCursorModels } from "../lib/api.js";
+import type { CursorModel } from "../lib/api.js";
 
 interface Props {
   status: CredentialStatus | null;
@@ -9,19 +11,26 @@ interface Props {
   onClear: () => void;
 }
 
+const DEFAULT_MODEL = "auto";
+
 const EMPTY: CredentialPayload = {
   githubToken: "",
   jiraBaseUrl: "",
   jiraEmail: "",
   jiraToken: "",
   cursorApiToken: "",
-  cursorModelId: "",
+  cursorModelId: DEFAULT_MODEL,
 };
 
 export function CredentialsPanel({ status, saving, error, onSave, onClear }: Props) {
   const [form, setForm] = useState<CredentialPayload>(EMPTY);
   const [showTokens, setShowTokens] = useState(false);
   const [collapsed, setCollapsed] = useState(status?.status === "ok");
+  const [models, setModels] = useState<CursorModel[]>([]);
+
+  useEffect(() => {
+    listCursorModels().then(setModels).catch(() => {});
+  }, []);
 
   const configured = status?.status === "ok";
 
@@ -80,7 +89,7 @@ export function CredentialsPanel({ status, saving, error, onSave, onClear }: Pro
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <CredentialItem label="GitHub" preview={status!.credentials.github.preview} />
             <CredentialItem label="Jira" preview={status!.credentials.jira.preview} extra={status!.credentials.jira.baseUrl} />
-            <CredentialItem label="Cursor" preview={status!.credentials.cursor.preview} />
+            <CredentialItem label="Cursor" preview={status!.credentials.cursor.preview} extra={status!.credentials.cursor.modelId} />
           </div>
           <div className="divider" />
           <button className="btn btn-danger btn-sm" onClick={onClear}>
@@ -161,14 +170,20 @@ export function CredentialsPanel({ status, saving, error, onSave, onClear }: Pro
                 />
               </div>
               <div className="field">
-                <label htmlFor="cursorModelId">Model ID (optional)</label>
-                <input
+                <label htmlFor="cursorModelId">Model</label>
+                <select
                   id="cursorModelId"
-                  type="text"
-                  placeholder="claude-4-5 (default)"
                   value={form.cursorModelId}
                   onChange={(e) => setForm((f) => ({ ...f, cursorModelId: e.target.value }))}
-                />
+                >
+                  {models.length > 0 ? (
+                    models.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))
+                  ) : (
+                    <option value={DEFAULT_MODEL}>Auto (let Cursor pick)</option>
+                  )}
+                </select>
               </div>
             </Section>
           </div>
