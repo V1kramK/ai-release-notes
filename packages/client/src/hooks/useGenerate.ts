@@ -20,6 +20,13 @@ export interface SectionData {
   category: Category;
   repo: string;
   content: string;
+  jiraKey?: string;
+  jiraSummary?: string;
+}
+
+export interface CheckpointEntry {
+  message: string;
+  ts: number;
 }
 
 export interface GenerationState {
@@ -27,6 +34,7 @@ export interface GenerationState {
   phase: GenerationPhase | null;
   sections: SectionData[];
   warnings: GenerationWarning[];
+  checkpoints: CheckpointEntry[];
   done: boolean;
   error: string | null;
   durationMs: number | null;
@@ -37,6 +45,7 @@ const INITIAL_STATE: GenerationState = {
   phase: null,
   sections: [],
   warnings: [],
+  checkpoints: [],
   done: false,
   error: null,
   durationMs: null,
@@ -46,7 +55,7 @@ export function useGenerate() {
   const [state, setState] = useState<GenerationState>(INITIAL_STATE);
   const abortRef = useRef<AbortController | null>(null);
 
-  const generate = useCallback((scopes: RepoScope[], useFake = false) => {
+  const generate = useCallback((scopes: RepoScope[], useFake = false, jiraProjectKeys?: string[], lookbackDays?: number, pinnedIssueKeys?: string[]) => {
     if (abortRef.current) abortRef.current.abort();
 
     const controller = new AbortController();
@@ -78,8 +87,15 @@ export function useGenerate() {
                 category: String(d["category"] ?? "") as Category,
                 repo: String(d["repo"] ?? ""),
                 content: String(d["content"] ?? ""),
+                jiraKey: typeof d["jiraKey"] === "string" ? d["jiraKey"] : undefined,
+                jiraSummary: typeof d["jiraSummary"] === "string" ? d["jiraSummary"] : undefined,
               },
             ],
+          }));
+        } else if (eventName === "checkpoint") {
+          setState((prev) => ({
+            ...prev,
+            checkpoints: [...prev.checkpoints, { message: String(d["message"] ?? ""), ts: Date.now() }],
           }));
         } else if (eventName === "warning") {
           setState((prev) => ({
@@ -94,11 +110,12 @@ export function useGenerate() {
             ],
           }));
         } else if (eventName === "done") {
+          const ms = typeof d["durationMs"] === "number" && d["durationMs"] > 0 ? d["durationMs"] : null;
           setState((prev) => ({
             ...prev,
             running: false,
-            done: true,
-            durationMs: typeof d["durationMs"] === "number" ? d["durationMs"] : null,
+            done: ms !== null || prev.sections.length > 0,  // only mark done if we have real results or real timing
+            durationMs: ms,
             phase: null,
           }));
         } else if (eventName === "error") {
@@ -110,7 +127,10 @@ export function useGenerate() {
           }));
         }
       },
-      controller.signal
+      controller.signal,
+      jiraProjectKeys,
+      lookbackDays,
+      pinnedIssueKeys
     );
   }, []);
 
@@ -135,9 +155,10 @@ export function useGenerate() {
       lines.push(`## ${category}`, "");
 
       for (const section of categorySections) {
-        if (categorySections.length > 1) {
-          lines.push(`### ${section.repo}`, "");
-        }
+        const heading = section.jiraKey
+          ? `### ${section.jiraKey}${section.jiraSummary ? ` — ${section.jiraSummary}` : ""}`
+          : `### ${section.repo}`;
+        lines.push(heading, "");
         lines.push(section.content, "");
       }
     }
